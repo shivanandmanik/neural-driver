@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "neural-driver"
+version = "0.1.0"
+description = "A* plans the route, a neuroevolved neural network drives it."
+requires-python = ">=3.12"
+dependencies = [
+    "pygame-ce>=2.5",
+    "numpy>=2.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "matplotlib>=3.8"]
+rl = ["gymnasium>=1.0", "stable-baselines3>=2.3"]   # Phase 4 stretch only
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
