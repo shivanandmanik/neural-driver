@@ -4,3 +4,4 @@ __pycache__/
 .pytest_cache/
 models/*.npz
 results/
+.claude/settings.local.json

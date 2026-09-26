@@ -1,0 +1,416 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Neural Driver</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --ground: #eceee6;
+    --surface: #f7f8f3;
+    --ink: #1c2520;
+    --muted: #5b675f;
+    --line: #d3d8cd;
+    --wall: #33423a;
+    --inflate: #b9c3b3;
+    --gridline: rgba(28,37,32,.07);
+    --explored: #e7b93c;
+    --route: #d0452b;
+    --car: #2459c9;
+    --ray: rgba(36,89,201,.55);
+    --hit: #2459c9;
+    --pos: #2459c9;
+    --neg: #d0452b;
+    --node: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --ground: #111613; --surface: #18201b; --ink: #e2e8df; --muted: #9aa79e; --line: #2c3730;
+      --wall: #5b6f63; --inflate: #2f3b34; --gridline: rgba(226,232,223,.06);
+      --explored: #c99a24; --route: #f0674a; --car: #6f9bff; --ray: rgba(111,155,255,.6);
+      --hit: #6f9bff; --pos: #6f9bff; --neg: #f0674a; --node: #18201b;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --ground: #111613; --surface: #18201b; --ink: #e2e8df; --muted: #9aa79e; --line: #2c3730;
+    --wall: #5b6f63; --inflate: #2f3b34; --gridline: rgba(226,232,223,.06);
+    --explored: #c99a24; --route: #f0674a; --car: #6f9bff; --ray: rgba(111,155,255,.6);
+    --hit: #6f9bff; --pos: #6f9bff; --neg: #f0674a; --node: #18201b;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--ground); color: var(--ink); font: 15px/1.55 "IBM Plex Sans", system-ui, sans-serif; padding-inline: 16px; padding-block: 28px 48px; }
+  .wrap { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+  header h1 { font: 700 clamp(28px, 4vw, 40px)/1.05 "Bricolage Grotesque", "IBM Plex Sans", sans-serif; letter-spacing: -.02em; margin: 0 0 6px; text-wrap: balance; }
+  header p { margin: 0; color: var(--muted); max-width: 64ch; }
+  .main { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 20px; align-items: start; }
+  @media (max-width: 880px) { .main { grid-template-columns: 1fr; } }
+  .stage { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  canvas#world { width: 100%; height: auto; aspect-ratio: 720 / 440; display: block; border-radius: 6px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; }
+  button { font: 500 14px "IBM Plex Sans", sans-serif; color: var(--ink); background: var(--ground); border: 1px solid var(--line); border-radius: 6px; padding: 7px 12px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible { outline: 2px solid var(--car); outline-offset: 2px; }
+  button.primary { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+  .stats { font: 12px "IBM Plex Mono", monospace; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 14px; height: 10px; border-radius: 2px; display: inline-block; }
+  aside { display: flex; flex-direction: column; gap: 14px; }
+  ol.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  ol.steps button { width: 100%; text-align: left; display: grid; grid-template-columns: 28px 1fr; gap: 8px; align-items: start; background: transparent; border: 1px solid transparent; padding: 9px 10px; }
+  ol.steps button .n { font: 500 12px "IBM Plex Mono", monospace; color: var(--muted); padding-top: 2px; }
+  ol.steps button .t { font-weight: 600; }
+  ol.steps button .d { display: block; font-weight: 400; color: var(--muted); font-size: 13.5px; margin-top: 2px; }
+  ol.steps button[aria-current="step"] { background: var(--surface); border-color: var(--line); }
+  ol.steps button[aria-current="step"] .n { color: var(--route); }
+  ol.steps button:not([aria-current="step"]) .d { display: none; }
+  .nn { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .nn h2 { font: 600 11px "IBM Plex Mono", monospace; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+  canvas#net { width: 100%; height: auto; aspect-ratio: 300 / 230; display: block; }
+  .note { font-size: 12.5px; color: var(--muted); margin: 0; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>A* plans the route. A neural net drives it.</h1>
+    <p>How the project works on a random map, in four steps. Press Play to watch it run, click a step to jump to it, or make a new map.</p>
+  </header>
+
+  <div class="main">
+    <section class="stage" aria-label="Simulation">
+      <canvas id="world" width="720" height="440" aria-label="Map with obstacles, planned route and car"></canvas>
+      <div class="bar">
+        <div class="controls">
+          <button id="play" class="primary" type="button">Pause</button>
+          <button id="newmap" type="button">New map</button>
+        </div>
+        <div class="stats" id="stats">seed –</div>
+      </div>
+      <div class="legend">
+        <span><i class="sw" style="background:var(--wall)"></i>Obstacle</span>
+        <span><i class="sw" style="background:var(--inflate)"></i>Grown by car radius</span>
+        <span><i class="sw" style="background:var(--explored)"></i>Cells A* explored</span>
+        <span><i class="sw" style="background:var(--route)"></i>Smoothed route</span>
+        <span><i class="sw" style="background:var(--car)"></i>Car + sensor rays</span>
+      </div>
+    </section>
+
+    <aside>
+      <ol class="steps" id="steps">
+        <li><button type="button" data-step="0"><span class="n">01</span><span><span class="t">Random map</span><span class="d">Each run builds a new map from a seed: walls with one real passage, fake gullies that dead-end, and random boulders. S is the start and G the goal.</span></span></button></li>
+        <li><button type="button" data-step="1"><span class="n">02</span><span><span class="t">Occupancy grid</span><span class="d">The shapes are sampled into 8 px cells. Every obstacle is grown by the car's radius (light cells), so any path through free cells is wide enough for the car.</span></span></button></li>
+        <li><button type="button" data-step="2"><span class="n">03</span><span><span class="t">A* plans the route</span><span class="d">A* expands cells in order of f = g + h (amber) until it reaches G, ignoring the gullies. The jagged grid path is then shortened with line-of-sight checks and rounded into a drivable route.</span></span></button></li>
+        <li><button type="button" data-step="3"><span class="n">04</span><span><span class="t">The network drives</span><span class="d">The car sees only 7 rays, its speed and a lookahead point on the route. Those 10 numbers go into the network, which outputs steering and throttle every frame.</span></span></button></li>
+      </ol>
+      <div class="nn">
+        <h2>Driver network · 10 → 8 → 4</h2>
+        <canvas id="net" width="300" height="230" aria-label="Neural network activations"></canvas>
+        <p class="note">In this illustration a simple controller stands in for the trained network, and the hidden layer uses random weights. In your project, neuroevolution learns the weights.</p>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+(() => {
+  const W = 720, H = 440, CELL = 8, GW = W / CELL, GH = Math.floor(H / CELL);
+  const CAR_R = 9, INFLATE = CAR_R + 3, RAY_LEN = 130, RAY_N = 7, RAY_SPREAD = Math.PI * 2 / 3;
+  const START = { x: 40, y: 220 }, GOAL = { x: 680, y: 220 };
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const world = document.getElementById("world"), net = document.getElementById("net");
+  const ctx = world.getContext("2d"), nctx = net.getContext("2d");
+  function fit(c, w, h) {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    c.width = w * dpr; c.height = h * dpr;
+    c.getContext("2d").setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  fit(world, W, H); fit(net, 300, 230);
+
+  let C = {};
+  function readTokens() {
+    const s = getComputedStyle(document.documentElement);
+    for (const k of ["ground","surface","ink","muted","line","wall","inflate","gridline","explored","route","car","ray","hit","pos","neg","node"]) C[k] = s.getPropertyValue("--" + k).trim();
+  }
+
+  function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+  // ---------- map ----------
+  let obs = [], seed = 0;
+  const rect = (cx, cy, w, h, a = 0) => ({ k: "r", cx, cy, w, h, a });
+  const circ = (cx, cy, r) => ({ k: "c", cx, cy, r });
+
+  function contains(o, x, y, pad) {
+    if (o.k === "c") return Math.hypot(x - o.cx, y - o.cy) < o.r + pad;
+    const c = Math.cos(-o.a), s = Math.sin(-o.a), dx = x - o.cx, dy = y - o.cy;
+    const lx = dx * c - dy * s, ly = dx * s + dy * c;
+    return Math.abs(lx) < o.w / 2 + pad && Math.abs(ly) < o.h / 2 + pad;
+  }
+  const solid = (x, y, pad = 0) => x < pad || y < pad || x > W - pad || y > H - pad || obs.some(o => contains(o, x, y, pad));
+
+  function makeMap(sd) {
+    const r = rng(sd), list = [];
+    const walls = [180, 360, 540], T = 22;
+    for (const wx of walls) {
+      const real = { c: 60 + r() * (H - 120), h: 64 };
+      let fake; do { fake = { c: 60 + r() * (H - 120), h: 56 }; } while (Math.abs(fake.c - real.c) < 110);
+      const gaps = [real, fake].sort((a, b) => a.c - b.c);
+      let y0 = 0;
+      for (const g of gaps) { const top = g.c - g.h / 2; if (top > y0) list.push(rect(wx, (y0 + top) / 2, T, top - y0)); y0 = g.c + g.h / 2; }
+      if (y0 < H) list.push(rect(wx, (y0 + H) / 2, T, H - y0));
+      // fake gully: a U-shaped pocket behind the fake opening
+      const side = r() < 0.5 ? 1 : -1, depth = 58, px = wx + side * (T / 2 + depth);
+      list.push(rect(px, fake.c, 14, fake.h + 28));
+      list.push(rect(wx + side * (T / 2 + depth / 2), fake.c - fake.h / 2 - 7, depth + 8, 14));
+      list.push(rect(wx + side * (T / 2 + depth / 2), fake.c + fake.h / 2 + 7, depth + 8, 14));
+    }
+    const lanes = [[40, 160], [200, 340], [380, 520], [560, 680]];
+    for (const [a, b] of lanes) {
+      const n = 1 + Math.floor(r() * 2);
+      for (let i = 0; i < n; i++) {
+        const x = a + 20 + r() * (b - a - 40), y = 30 + r() * (H - 60);
+        if (Math.hypot(x - START.x, y - START.y) < 70 || Math.hypot(x - GOAL.x, y - GOAL.y) < 70) continue;
+        list.push(r() < 0.55 ? circ(x, y, 12 + r() * 16) : rect(x, y, 18 + r() * 26, 12 + r() * 16, r() * Math.PI));
+      }
+    }
+    return list;
+  }
+
+  // ---------- grid + A* ----------
+  let raw, grid, explored, gridPath, route, cumLen;
+  function buildGrid() {
+    raw = new Uint8Array(GW * GH); grid = new Uint8Array(GW * GH);
+    for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) {
+      const x = i * CELL + CELL / 2, y = j * CELL + CELL / 2;
+      raw[j * GW + i] = solid(x, y, 0) ? 1 : 0;
+      grid[j * GW + i] = solid(x, y, INFLATE) ? 1 : 0;
+    }
+  }
+  const cellOf = p => [Math.floor(p.x / CELL), Math.floor(p.y / CELL)];
+
+  function astar() {
+    const [si, sj] = cellOf(START), [gi, gj] = cellOf(GOAL);
+    const N = GW * GH, g = new Float64Array(N).fill(Infinity), came = new Int32Array(N).fill(-1), closed = new Uint8Array(N);
+    const h = (i, j) => { const dx = Math.abs(i - gi), dy = Math.abs(j - gj); return (dx + dy) + (Math.SQRT2 - 2) * Math.min(dx, dy); };
+    const heap = [];
+    const push = (f, id) => { heap.push([f, id]); let k = heap.length - 1; while (k > 0) { const p = (k - 1) >> 1; if (heap[p][0] <= heap[k][0]) break; [heap[p], heap[k]] = [heap[k], heap[p]]; k = p; } };
+    const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let k = 0; for (;;) { const l = 2 * k + 1, r = l + 1; let m = k; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === k) break; [heap[m], heap[k]] = [heap[k], heap[m]]; k = m; } } return top; };
+    const s = sj * GW + si, goal = gj * GW + gi; g[s] = 0; push(h(si, sj), s);
+    const order = [];
+    while (heap.length) {
+      const [, id] = pop(); if (closed[id]) continue; closed[id] = 1; order.push(id);
+      if (id === goal) break;
+      const i = id % GW, j = (id / GW) | 0;
+      for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+        if (!di && !dj) continue; const ni = i + di, nj = j + dj;
+        if (ni < 0 || nj < 0 || ni >= GW || nj >= GH) continue;
+        const nid = nj * GW + ni; if (grid[nid] || closed[nid]) continue;
+        if (di && dj && (grid[j * GW + ni] || grid[nj * GW + i])) continue;
+        const ng = g[id] + (di && dj ? Math.SQRT2 : 1);
+        if (ng < g[nid]) { g[nid] = ng; came[nid] = id; push(ng + h(ni, nj), nid); }
+      }
+    }
+    if (!closed[goal]) return null;
+    const path = []; for (let c = goal; c !== -1; c = came[c]) path.push({ x: (c % GW) * CELL + CELL / 2, y: ((c / GW) | 0) * CELL + CELL / 2 });
+    path.reverse(); path[0] = { ...START }; path[path.length - 1] = { ...GOAL };
+    return { order, path };
+  }
+
+  function lineFree(a, b) {
+    const d = Math.hypot(b.x - a.x, b.y - a.y), n = Math.ceil(d / 3);
+    for (let k = 0; k <= n; k++) { const x = a.x + (b.x - a.x) * k / n, y = a.y + (b.y - a.y) * k / n; const i = Math.floor(x / CELL), j = Math.floor(y / CELL); if (grid[j * GW + i]) return false; }
+    return true;
+  }
+  function smooth(p) {
+    const out = [p[0]]; let i = 0;
+    while (i < p.length - 1) { let j = p.length - 1; while (j > i + 1 && !lineFree(p[i], p[j])) j--; out.push(p[j]); i = j; }
+    let pts = out;
+    for (let it = 0; it < 3; it++) {
+      const q = [pts[0]];
+      for (let k = 0; k < pts.length - 1; k++) { const a = pts[k], b = pts[k + 1]; q.push({ x: .75 * a.x + .25 * b.x, y: .75 * a.y + .25 * b.y }, { x: .25 * a.x + .75 * b.x, y: .25 * a.y + .75 * b.y }); }
+      q.push(pts[pts.length - 1]); pts = q;
+    }
+    const res = [pts[0]];
+    for (let k = 1; k < pts.length; k++) {
+      const a = res[res.length - 1], b = pts[k], d = Math.hypot(b.x - a.x, b.y - a.y);
+      const n = Math.max(1, Math.floor(d / 4));
+      for (let m = 1; m <= n; m++) res.push({ x: a.x + (b.x - a.x) * m / n, y: a.y + (b.y - a.y) * m / n });
+    }
+    return res;
+  }
+
+  // ---------- network (illustrative) ----------
+  const nr = rng(7);
+  const W1 = Array.from({ length: 8 }, () => Array.from({ length: 10 }, () => (nr() * 2 - 1) * 1.2));
+  const W2 = Array.from({ length: 4 }, () => Array.from({ length: 8 }, () => (nr() * 2 - 1)));
+  let netIn = new Array(10).fill(0), netHid = new Array(8).fill(0), netOut = [0, 0, 0, 0];
+
+  // ---------- car ----------
+  let car, rays = [], look = null;
+  function resetCar() {
+    const a = Math.atan2(route[6].y - START.y, route[6].x - START.x);
+    car = { x: START.x, y: START.y, a, v: 0, idx: 0, done: false, t: 0 };
+  }
+  function castRays() {
+    rays = [];
+    for (let k = 0; k < RAY_N; k++) {
+      const ang = car.a - RAY_SPREAD / 2 + RAY_SPREAD * k / (RAY_N - 1);
+      let d = RAY_LEN;
+      for (let s = 2; s <= RAY_LEN; s += 3) { if (solid(car.x + Math.cos(ang) * s, car.y + Math.sin(ang) * s)) { d = s; break; } }
+      rays.push({ ang, d });
+    }
+  }
+  const wrap = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
+  function stepCar() {
+    if (car.done) return;
+    let best = car.idx, bd = Infinity;
+    for (let k = car.idx; k < Math.min(route.length, car.idx + 40); k++) { const d = Math.hypot(route[k].x - car.x, route[k].y - car.y); if (d < bd) { bd = d; best = k; } }
+    car.idx = best;
+    const li = Math.min(route.length - 1, car.idx + 11); look = route[li];
+    castRays();
+    const tgt = Math.atan2(look.y - car.y, look.x - car.x), err = wrap(tgt - car.a);
+    const left = (rays[0].d + rays[1].d) / 2, right = (rays[RAY_N - 1].d + rays[RAY_N - 2].d) / 2;
+    let steer = err * 0.18 + (right - left) / RAY_LEN * 0.02;
+    steer = Math.max(-0.07, Math.min(0.07, steer));
+    const front = Math.min(rays[2].d, rays[3].d, rays[4].d) / RAY_LEN;
+    const vT = 1.1 + 1.6 * Math.min(1, front * 1.3) * (1 - Math.min(1, Math.abs(err) / 1.2));
+    const throttle = vT > car.v ? 1 : 0, brake = vT < car.v - 0.15 ? 1 : 0;
+    car.v += throttle ? 0.06 : 0; car.v -= brake ? 0.1 : 0; car.v = Math.max(0, Math.min(2.8, car.v * 0.995));
+    car.a += steer * Math.min(1, car.v / 1.2 + 0.3);
+    car.x += Math.cos(car.a) * car.v; car.y += Math.sin(car.a) * car.v;
+    if (Math.hypot(GOAL.x - car.x, GOAL.y - car.y) < 10) car.done = true;
+    netIn = [...rays.map(r => 1 - r.d / RAY_LEN), car.v / 2.8, err / Math.PI, Math.min(1, Math.hypot(look.x - car.x, look.y - car.y) / 60)];
+    netHid = W1.map(row => Math.tanh(row.reduce((s, w, i) => s + w * netIn[i], 0)));
+    netOut = [Math.max(0, -steer) / 0.07, Math.max(0, steer) / 0.07, throttle ? 1 : 0.1, brake ? 1 : 0];
+  }
+
+  // ---------- state machine ----------
+  let step = 0, t0 = 0, playing = !reduce, exploredN = 0, result = null;
+  const durations = [2600, 2600, null, null];
+
+  function newMap(sd) {
+    let tries = 0;
+    do { seed = sd ?? Math.floor(Math.random() * 90000) + 1000; sd = undefined; obs = makeMap(seed); buildGrid(); result = astar(); tries++; } while (!result && tries < 40);
+    route = smooth(result.path);
+    let L = 0; for (let k = 1; k < route.length; k++) L += Math.hypot(route[k].x - route[k - 1].x, route[k].y - route[k - 1].y);
+    document.getElementById("stats").textContent = `seed ${seed} · ${result.order.length.toLocaleString()} cells explored · route ${Math.round(L)} px`;
+    resetCar();
+  }
+  function go(s) {
+    step = s; t0 = performance.now(); exploredN = s > 2 ? result.order.length : 0;
+    if (s === 3) resetCar();
+    if (s === 2 && !playing) exploredN = result.order.length;
+    document.querySelectorAll("#steps button").forEach(b => { if (+b.dataset.step === s) b.setAttribute("aria-current", "step"); else b.removeAttribute("aria-current"); });
+  }
+
+  // ---------- drawing ----------
+  function drawObstacles() {
+    ctx.fillStyle = C.wall;
+    for (const o of obs) {
+      ctx.beginPath();
+      if (o.k === "c") ctx.arc(o.cx, o.cy, o.r, 0, Math.PI * 2);
+      else { ctx.save(); ctx.translate(o.cx, o.cy); ctx.rotate(o.a); ctx.rect(-o.w / 2, -o.h / 2, o.w, o.h); ctx.restore(); }
+      ctx.fill();
+    }
+  }
+  function drawGrid(showInflate) {
+    for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) {
+      const id = j * GW + i;
+      if (raw[id]) { ctx.fillStyle = C.wall; ctx.fillRect(i * CELL, j * CELL, CELL, CELL); }
+      else if (showInflate && grid[id]) { ctx.fillStyle = C.inflate; ctx.fillRect(i * CELL, j * CELL, CELL, CELL); }
+    }
+    ctx.strokeStyle = C.gridline; ctx.lineWidth = 1; ctx.beginPath();
+    for (let i = 0; i <= GW; i++) { ctx.moveTo(i * CELL + .5, 0); ctx.lineTo(i * CELL + .5, H); }
+    for (let j = 0; j <= GH; j++) { ctx.moveTo(0, j * CELL + .5); ctx.lineTo(W, j * CELL + .5); }
+    ctx.stroke();
+  }
+  function drawExplored(n) {
+    ctx.fillStyle = C.explored; ctx.globalAlpha = .55;
+    for (let k = 0; k < n; k++) { const id = result.order[k]; ctx.fillRect((id % GW) * CELL + 1, ((id / GW) | 0) * CELL + 1, CELL - 2, CELL - 2); }
+    ctx.globalAlpha = 1;
+  }
+  function drawPath(p, color, w, dash) {
+    ctx.strokeStyle = color; ctx.lineWidth = w; ctx.setLineDash(dash || []); ctx.lineJoin = "round"; ctx.lineCap = "round";
+    ctx.beginPath(); p.forEach((q, k) => k ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ctx.stroke(); ctx.setLineDash([]);
+  }
+  function marker(p, label) {
+    ctx.fillStyle = C.ink; ctx.beginPath(); ctx.arc(p.x, p.y, 11, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = C.surface; ctx.font = "600 12px 'IBM Plex Mono', monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(label, p.x, p.y + 1);
+  }
+  function drawCar() {
+    for (const r of rays) {
+      const ex = car.x + Math.cos(r.ang) * r.d, ey = car.y + Math.sin(r.ang) * r.d;
+      ctx.strokeStyle = C.ray; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(car.x, car.y); ctx.lineTo(ex, ey); ctx.stroke();
+      if (r.d < RAY_LEN) { ctx.fillStyle = C.hit; ctx.beginPath(); ctx.arc(ex, ey, 2.6, 0, Math.PI * 2); ctx.fill(); }
+    }
+    if (look) { ctx.strokeStyle = C.route; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(look.x, look.y, 5, 0, Math.PI * 2); ctx.stroke(); }
+    ctx.save(); ctx.translate(car.x, car.y); ctx.rotate(car.a);
+    ctx.fillStyle = C.car; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(-11, -6.5, 22, 13, 3) : ctx.rect(-11, -6.5, 22, 13); ctx.fill();
+    ctx.fillStyle = C.surface; ctx.fillRect(3, -4.5, 5, 9);
+    ctx.restore();
+  }
+  function drawNet() {
+    nctx.clearRect(0, 0, 300, 230);
+    const cols = [18, 150, 270], layers = [10, 8, 4];
+    const ys = n => Array.from({ length: n }, (_, k) => 18 + (194 / (n - 1)) * k);
+    const Y = layers.map(ys);
+    const live = step === 3;
+    const vals = [netIn, netHid, netOut];
+    for (let l = 0; l < 2; l++) {
+      const Wm = l ? W2 : W1;
+      for (let a = 0; a < layers[l]; a++) for (let b = 0; b < layers[l + 1]; b++) {
+        const w = Wm[b][a], act = live ? Math.abs(vals[l][a]) : .15;
+        nctx.strokeStyle = w > 0 ? C.pos : C.neg; nctx.globalAlpha = Math.min(.8, .05 + act * Math.abs(w) * .5);
+        nctx.lineWidth = 1; nctx.beginPath(); nctx.moveTo(cols[l], Y[l][a]); nctx.lineTo(cols[l + 1], Y[l + 1][b]); nctx.stroke();
+      }
+    }
+    nctx.globalAlpha = 1;
+    const inLabels = ["ray 1", "ray 2", "ray 3", "ray 4", "ray 5", "ray 6", "ray 7", "speed", "angle", "dist"];
+    const outLabels = ["left", "right", "gas", "brake"];
+    for (let l = 0; l < 3; l++) for (let k = 0; k < layers[l]; k++) {
+      const v = live ? Math.min(1, Math.abs(vals[l][k])) : 0;
+      nctx.fillStyle = C.node; nctx.strokeStyle = C.muted; nctx.lineWidth = 1;
+      nctx.beginPath(); nctx.arc(cols[l], Y[l][k], 6, 0, Math.PI * 2); nctx.fill(); nctx.stroke();
+      if (v > 0) { nctx.fillStyle = l === 2 ? C.route : C.car; nctx.globalAlpha = v; nctx.beginPath(); nctx.arc(cols[l], Y[l][k], 6, 0, Math.PI * 2); nctx.fill(); nctx.globalAlpha = 1; }
+    }
+    nctx.fillStyle = C.muted; nctx.font = "10px 'IBM Plex Mono', monospace"; nctx.textBaseline = "middle";
+    nctx.textAlign = "left"; inLabels.forEach((s, k) => nctx.fillText(s, cols[0] + 10, Y[0][k]));
+    nctx.textAlign = "right"; outLabels.forEach((s, k) => nctx.fillText(s, cols[2] - 10, Y[2][k]));
+  }
+
+  function frame(now) {
+    readTokens();
+    const el = now - t0;
+    if (playing) {
+      if (step === 2) { exploredN = Math.min(result.order.length, exploredN + Math.max(12, Math.ceil(result.order.length / 150))); }
+      if (step === 3) { for (let k = 0; k < 2; k++) stepCar(); }
+      if (durations[step] && el > durations[step]) go(step + 1);
+      else if (step === 2 && exploredN >= result.order.length && el > 5200) go(3);
+      else if (step === 3 && car.done) { if (!car.t) car.t = now; else if (now - car.t > 1400) { newMap(); go(0); } }
+    }
+    ctx.fillStyle = C.surface; ctx.fillRect(0, 0, W, H);
+    if (step === 0) drawObstacles();
+    else if (step === 1) drawGrid(el > 900 || !playing);
+    else if (step === 2) { drawGrid(true); drawExplored(exploredN); if (exploredN >= result.order.length) { drawPath(result.path, C.ink, 1.5, [3, 4]); drawPath(route, C.route, 3.5); } }
+    else { drawObstacles(); drawPath(route, C.route, 3, [2, 6]); if (!rays.length) castRays(); drawCar(); }
+    marker(START, "S"); marker(GOAL, "G");
+    drawNet();
+    requestAnimationFrame(frame);
+  }
+
+  const playBtn = document.getElementById("play");
+  function setPlaying(p) { playing = p; playBtn.textContent = p ? "Pause" : "Play"; t0 = performance.now(); }
+  playBtn.addEventListener("click", () => setPlaying(!playing));
+  document.getElementById("newmap").addEventListener("click", () => { newMap(); go(playing ? 0 : 3); if (!playing) { exploredN = result.order.length; castRays(); } });
+  document.querySelectorAll("#steps button").forEach(b => b.addEventListener("click", () => { go(+b.dataset.step); if (+b.dataset.step === 3 && !playing) castRays(); }));
+
+  newMap(4821);
+  if (reduce) { setPlaying(false); go(3); castRays(); } else go(0);
+  setPlaying(playing);
+  requestAnimationFrame(frame);
+})();
+</script>
+
+</body></html>
