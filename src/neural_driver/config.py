@@ -4,6 +4,12 @@ SCREEN_HEIGHT = 700
 FPS = 60
 BG_COLOR = (236, 238, 230)
 
+# Coordinate grid (drawing only). 1 grid unit = GRID_SPACING px; labels are in pixels.
+GRID_SPACING = 50
+GRID_LABEL_EVERY = 2  # label every Nth grid line to avoid clutter
+GRID_COLOR = (205, 207, 200)
+AXIS_COLOR = (0, 0, 0)
+
 # Car dimensions and color
 CAR_LENGTH = 40
 CAR_WIDTH = 20
