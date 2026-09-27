@@ -48,6 +48,7 @@ def test_friction_snaps_to_exactly_zero():
 def test_no_steering_when_stopped():
     car = Car(0, 0, 0)
     car.update(False, False, True, False)
+    assert car.angle == 0.0
     car.update(False, False, False, True)
     assert car.angle == 0.0
 
